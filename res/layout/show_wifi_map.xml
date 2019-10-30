@@ -1,0 +1,69 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent" >
+
+    <fragment
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        class="com.google.android.gms.maps.SupportMapFragment" />
+
+    <Button
+        android:id="@+id/returnCurButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="8dp"
+        android:layout_marginLeft="8dp"
+        android:background="@drawable/btn_myposition" />
+
+    <Button
+        android:id="@+id/cloudButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/cloud_button_image" />
+
+    <Button
+        android:id="@+id/suncloudButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/cloudButton"
+        android:layout_alignParentRight="true"
+        android:background="@drawable/suncloud_button_image" />
+
+    <Button
+        android:id="@+id/sunButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/suncloudButton"
+        android:layout_alignParentRight="true"
+        android:background="@drawable/sun_button_image" />
+
+    <Button
+        android:id="@+id/dropButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentTop="true"
+        android:background="@drawable/btn_erase" />
+
+    <Button
+        android:id="@+id/searchListButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_toLeftOf="@+id/dropButton"
+        android:background="@drawable/btn_search_list" />
+
+    <Button
+        android:id="@+id/searchButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_toLeftOf="@+id/searchListButton"
+        android:background="@drawable/btn_search" />
+
+</RelativeLayout>

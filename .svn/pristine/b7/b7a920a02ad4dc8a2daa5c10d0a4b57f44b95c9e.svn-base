@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">WiFi기상도</string>
+    <string name="action_settings">설정</string>
+    <string name="str_done">완료</string>
+    <string name="str_menu">메뉴</string>
+    <string name="str_search">검색</string>
+    <string name="str_wifimap">WIFI 지도</string>
+    <string name="str_statistics">통계</string>
+
+</resources>

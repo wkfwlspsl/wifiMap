@@ -1,0 +1,138 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/leftslidemenu"
+    android:layout_width="240dp"
+    android:layout_height="match_parent"
+    android:background="#ffffff"
+    android:orientation="horizontal"
+    android:visibility="visible" >
+
+    <RelativeLayout
+        android:id="@+id/wifiInfoLayout"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_mypage_mywifi" >
+
+        <TextView
+            android:id="@+id/textView1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="8dp"
+            android:text="지금 나의 와이파이"
+            android:textColor="#97caf4"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/wifi_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/textView1"
+            android:layout_centerHorizontal="true"
+            android:text="WIFI_NAME"
+            android:textColor="#ffffff"
+            android:textSize="16sp" />
+    </RelativeLayout>
+
+    <Button
+        android:id="@+id/channelButton"
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="12dp"
+        android:layout_marginLeft="30dp"
+        android:layout_marginRight="30dp"
+        android:background="@drawable/btn_clean"
+        android:text="     신호최적화"
+        android:textColor="#ffffff"
+        android:textSize="14sp" />
+
+    <ImageView
+        android:id="@+id/imageView2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignBottom="@+id/channelButton"
+        android:layout_marginBottom="11dp"
+        android:layout_marginLeft="40dp"
+        android:src="@drawable/img_reload" />
+
+    <RelativeLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/channelButton"
+        android:layout_alignLeft="@+id/imageView2"
+        android:layout_alignRight="@+id/channelButton"
+        android:layout_below="@id/wifiInfoLayout"
+        android:layout_centerHorizontal="true"
+        android:layout_centerVertical="true" >
+
+        <ImageView
+            android:id="@+id/mypageChart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true"
+            android:src="@drawable/bg_mypage_chart" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignBottom="@id/mypageChart"
+            android:layout_alignParentRight="true"
+            android:layout_alignTop="@id/mypageChart"
+            android:layout_centerVertical="true"
+            android:gravity="center"
+            android:orientation="vertical" >
+
+            <ImageView
+                android:id="@+id/imageView3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="144"
+                android:src="@drawable/img_mypage_a" />
+
+            <ImageView
+                android:id="@+id/imageView4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="210"
+                android:src="@drawable/img_mypage_b" />
+
+            <ImageView
+                android:id="@+id/imageView5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="144"
+                android:src="@drawable/img_mypage_c" />
+
+            <ImageView
+                android:id="@+id/imageView6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="210"
+                android:src="@drawable/img_mypage_d" />
+
+            <ImageView
+                android:id="@+id/imageView7"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="144"
+                android:src="@drawable/img_mypage_e" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chartLength"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignBottom="@id/mypageChart"
+            android:layout_alignLeft="@id/mypageChart"
+            android:layout_marginBottom="40dp"
+            android:background="@drawable/img_mypage_chart"
+            android:orientation="vertical" >
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+</RelativeLayout>

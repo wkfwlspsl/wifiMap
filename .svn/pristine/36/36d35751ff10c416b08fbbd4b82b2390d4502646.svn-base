@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#ffffff" >
+
+    <ImageView
+        android:id="@+id/bg_popup"
+        android:layout_width="fill_parent"
+        android:layout_height="75dp"
+        android:background="@drawable/bg_popup" />
+
+    <TextView
+        android:id="@+id/textView1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="10dp"
+        android:text="이 지역의 현재 WIFI 날씨"
+        android:textColor="#84c1f1"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/popupWifiName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/textView1"
+        android:layout_margin="10dp"
+        android:layout_marginBottom="20dp"
+        android:text="-"
+        android:textColor="#1c8ce6"
+        android:textSize="20sp" />
+
+    <ImageView
+        android:id="@+id/popupImg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentTop="true"
+        android:src="@drawable/bg_popup_strong" />
+
+</RelativeLayout>

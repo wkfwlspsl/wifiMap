@@ -1,0 +1,574 @@
+package com.example.wifimap;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.StringTokenizer;
+
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+
+import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.app.AlertDialog.Builder;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Color;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.StrictMode;
+import android.support.v4.app.FragmentActivity;
+import android.telephony.TelephonyManager;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnCameraChangeListener;
+import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+
+public class ShowTelecomMap extends FragmentActivity implements
+		LocationListener {
+	// 정보를 위한 변수들
+	WifiInfo info;
+	WifiManager mng;
+	WifiInfo wifi;
+	String Ip, apTelecom, TelecomIP, cnt, mac, radius;
+	int count = 0;
+	InputStream is = null;
+	String[][] RealrowArr;
+
+	// 현재 접속중인 Wifi의 정보
+	String curTime, curUserTelecom, curSsid, curMac, curDeviceName, c_channel,
+			curApTelecom, curIp = null;
+	double curLat, curLon = 0;
+	int curLength = 0;
+	boolean curIsOpen = false;
+
+	// 지도를 위한 변수들
+	GoogleMap mGoogleMap; // 지도맵 받을 변수
+	Geocoder geoCoder; // 주소(string)를 위도경도로 바꾸어주는 변수
+	protected LocationManager locationManager;
+	String userTelecom, ssid, signalLength, longitude, latitude;
+	Marker curMarker = null; // 현재 위치 마커
+	boolean isGetLocation = false; // GPS 나 wife 정보가 켜져있는지 확인, GPS 상태값
+	String inputPasswd;
+
+	// DB에 저장된 Wifi 목록3
+	ArrayList<ViewWifiInfo> listItem = new ArrayList<ViewWifiInfo>();
+
+	// 현재 위치 주변의 Wifi 목록
+	ArrayList<ViewWifiInfo> currentWifi = new ArrayList<ViewWifiInfo>();
+	ArrayList<Marker> currentApMarker = new ArrayList<Marker>(); // ap위치 마커
+	ArrayList<Circle> currentApCircle = new ArrayList<Circle>(); // 원...
+
+	// 색상변수
+	int sktColor = Color.argb(204, 255, 87, 26);
+	int ktColor = Color.argb(204, 223, 32, 40);
+	int lgColor = Color.argb(204, 236, 6, 141);
+	int noneColor = Color.argb(204, 194, 207, 249);
+
+	Handler handler = new Handler();
+
+	// DB관련 변수
+	DBHelper myHelper;
+	EditText edtName, edtNameResult;
+	SQLiteDatabase sqlDB;
+
+	public boolean mDatainput = false;
+
+	@SuppressLint("InflateParams")
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.show_telecom_map);
+
+		// 안드로이드 버전 3.0 이상에서 UI Thread에서 인터넷 연결시 runtime 에러 안 나게 하는 법
+		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder()
+				.permitAll().build();
+		StrictMode.setThreadPolicy(policy);
+
+		// < 변수들 초기화 >
+		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+		mGoogleMap = ((SupportMapFragment) getSupportFragmentManager()
+				.findFragmentById(R.id.map)).getMap(); // 맵 초기화
+		geoCoder = new Geocoder(this); // geoCoder 초기화
+		mng = (WifiManager) getSystemService(WIFI_SERVICE);
+		info = mng.getConnectionInfo();
+
+		Button sktBtn = (Button) findViewById(R.id.sktButton);
+		Button ktBtn = (Button) findViewById(R.id.ktButton);
+		Button lgBtn = (Button) findViewById(R.id.lgButton);
+		Button noneBtn = (Button) findViewById(R.id.noneButton);
+		Button returnCureBtn = (Button) findViewById(R.id.returnCurButton);
+		currentLocation(); // 현재 위치 출력해주는 함수 호출
+
+		myHelper = new DBHelper(this);
+
+		// 현재 위치로 돌아가는 버튼
+		returnCureBtn.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				if (v.getId() == R.id.returnCurButton)
+					LocationZoom(new LatLng(curLat, curLon));
+			}
+		});
+
+		// 카메라 이동 확대 축소가 있을때 이벤트 발생
+		mGoogleMap.setOnCameraChangeListener(new OnCameraChangeListener() {
+			public void onCameraChange(CameraPosition position) {
+				// LatLng point = position.target;
+				float zoomLevel = position.zoom;
+
+				if (!currentApCircle.isEmpty()) {
+					if (zoomLevel < 13.0) // 원을 안보이게 해야하는 경우
+						for (int i = 0; i < currentApCircle.size(); i++)
+							// currentApCircle.get(i).setVisible(false);
+							setCircleVisible(currentApCircle.get(i), false);
+
+					else
+						// 원을 보이게 해야하는 경우
+						for (int i = 0; i < currentApCircle.size(); i++)
+							// currentApCircle.get(i).setVisible(true);
+
+							setCircleVisible(currentApCircle.get(i), true);
+				}
+			}
+		});
+
+		// 마커 클릭시 해당 Wifi의 정보 출력
+		mGoogleMap.setOnMarkerClickListener(new OnMarkerClickListener() {
+
+			@Override
+			public boolean onMarkerClick(Marker marker) {
+				if (!marker.equals(curMarker))
+					marker.setTitle(marker.getTitle());
+				return false;
+			}
+
+		});
+
+		// 통신사 버튼 리스너
+		View.OnClickListener signalBtnListener = new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				Button btn = (Button) findViewById(v.getId());
+				int color = 0;
+
+				// 버튼이 선택된 상태인지 아닌지 판별후 변경
+				if (btn.isSelected())
+					btn.setSelected(false);
+				else
+					btn.setSelected(true);
+
+				// 버튼에 따라 색상 지정
+				if (v.getId() == R.id.sktButton)
+					color = sktColor;
+				else if (v.getId() == R.id.ktButton)
+					color = ktColor;
+				else if (v.getId() == R.id.lgButton)
+					color = lgColor;
+				else if (v.getId() == R.id.noneButton)
+					color = noneColor;
+
+				// 색상에 따라서 일치하는 경우 안보이게 함
+				if (color != 0) {
+					for (int i = 0; i < currentApCircle.size(); i++) {
+						if (currentApCircle.get(i).getFillColor() == color)
+							if (currentApCircle.get(i).isVisible()) {
+								currentApCircle.get(i).setVisible(false);
+								currentApMarker.get(i).setVisible(false);
+							} else {
+								currentApCircle.get(i).setVisible(true);
+								currentApMarker.get(i).setVisible(true);
+							}
+					}
+				}
+			}
+		};
+		sktBtn.setOnClickListener(signalBtnListener);
+		ktBtn.setOnClickListener(signalBtnListener);
+		lgBtn.setOnClickListener(signalBtnListener);
+		noneBtn.setOnClickListener(signalBtnListener);
+	}
+
+	// 현재 위치 알아내기
+	public void currentLocation() {
+
+		Location location = null;
+		boolean isGPSEnabled = false; // 현재 GPS 사용유무
+		boolean isNetworkEnabled = false;// 네트워크 사용유무
+
+		// 최소 GPS 정보 업데이트 거리 10미터
+		long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10;
+		// 최소 GPS 정보 업데이트 시간 밀리세컨이므로 1분
+		long MIN_TIME_BW_UPDATES = 1000 * 60 * 1;
+
+		try {
+			// GPS 정보 가져오기
+			isGPSEnabled = locationManager
+					.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+			// 현재 네트워크 상태 값 알아오기
+			isNetworkEnabled = locationManager
+					.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+
+			if (!isGPSEnabled && !isNetworkEnabled) {
+				// GPS 와 네트워크사용이 가능하지 않을때 소스 구현
+				Toast.makeText(ShowTelecomMap.this, "현재 위치를 알수가 없습니다.",
+						Toast.LENGTH_LONG).show();
+				isGetLocation = false;
+			} else {
+				isGetLocation = true;
+
+				if (isNetworkEnabled) {
+					locationManager.requestLocationUpdates(
+							LocationManager.NETWORK_PROVIDER,
+							MIN_TIME_BW_UPDATES,
+							MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
+
+					if (locationManager != null) {
+						location = locationManager
+								.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+						if (location != null) { // 위도 경도 저장
+							curLat = location.getLatitude();
+							curLon = location.getLongitude();
+
+							findCloseWifi(currentWifi, curLat, curLon);
+							setApMarker(currentWifi, currentApMarker,
+									currentApCircle);
+						}
+					}
+				}
+
+				else if (isGPSEnabled) {
+					if (location == null) {
+						locationManager.requestLocationUpdates(
+								LocationManager.GPS_PROVIDER,
+								MIN_TIME_BW_UPDATES,
+								MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
+						if (locationManager != null) {
+							location = locationManager
+									.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+							if (location != null) {
+								curLat = location.getLatitude();
+								curLon = location.getLongitude();
+
+								findCloseWifi(currentWifi, curLat, curLon);
+								setApMarker(currentWifi, currentApMarker,
+										currentApCircle);
+							}
+						}
+					}
+				}
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		setCurrentMarker(curLat, curLon);
+	}
+
+	public void stopUsingGPS() { // GPS 종료
+		if (locationManager != null) {
+			locationManager.removeUpdates(ShowTelecomMap.this);
+		}
+	}
+
+	public void showSettingsAlert() { // GPS 정보를 가져오지 못했을때 설정값으로 갈지 물어보는 alert 창
+		AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
+
+		alertDialog.setTitle("GPS 사용유무셋팅");
+
+		alertDialog.show();
+	}
+
+	// AP마커에 대한 원을 출력시킬 것인지 판별하는 함수
+	public void setCircleVisible(Circle setC, boolean mapBool) {
+		Button sktBtn = (Button) findViewById(R.id.sktButton);
+		Button ktBtn = (Button) findViewById(R.id.ktButton);
+		Button lgBtn = (Button) findViewById(R.id.lgButton);
+		Button noneBtn = (Button) findViewById(R.id.noneButton);
+
+		boolean bool = true;
+
+		// 원 색깔에 따라 버튼이 눌렸는지 판별
+		if (setC.getFillColor() == sktColor)
+			if (sktBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+		else if (setC.getFillColor() == ktColor)
+			if (ktBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+		else if (setC.getFillColor() == lgColor)
+			if (lgBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+		else if (setC.getFillColor() == noneColor)
+			if (noneBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+
+		// 버튼이 선택되어 있지 않고, 지도에서도 원이 보이는 레벨일 경우에만 출력
+		if (bool == true && mapBool == true)
+			setC.setVisible(true);
+		else
+			setC.setVisible(false);
+	}
+
+	public void findCloseWifi(ArrayList<ViewWifiInfo> vw, double lat, double lon)
+			throws URISyntaxException, ClientProtocolException, IOException {
+
+		String passwd = null, isOpen = null;
+		// 현재 위치 주변의 WIFI 목록을 받아와 지도에 표시!
+
+		// 서버로 부터 데이터 받아오기
+		StringBuilder jsonHtml = new StringBuilder();
+
+		URL url = new URL("http://113.198.84.38/dbTOandroid.php?latitude="
+				+ lat + "&longitude=" + lon);
+		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+		if (conn != null) {
+			conn.setConnectTimeout(10000);
+			conn.setUseCaches(false);
+			if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
+				BufferedReader br = new BufferedReader(new InputStreamReader(
+						conn.getInputStream(), "EUC-KR"));
+
+				for (;;) {
+
+					String line = br.readLine();
+
+					if (line == null)
+						break;
+					jsonHtml.append(line + "\n");
+				}
+				br.close();
+			}
+			conn.disconnect();
+		}
+
+		String Json = jsonHtml.toString();
+
+		String[] rowArr = Json.split("\n");
+
+		if (!vw.isEmpty())
+			vw.clear();
+
+		for (int q = 0; q < rowArr.length; q++) {
+			int testCnt = 0;
+			StringTokenizer stk = new StringTokenizer(rowArr[q], "\"", false);
+			while (stk.hasMoreTokens()) {
+				String rowStr = stk.nextToken();
+
+				if (testCnt == 1)
+					ssid = rowStr;
+
+				else if (testCnt == 3)
+					isOpen = rowStr;
+
+				else if (testCnt == 5)
+					apTelecom = rowStr;
+
+				else if (testCnt == 7)
+					mac = rowStr;
+
+				else if (testCnt == 9)
+					latitude = rowStr;
+
+				else if (testCnt == 11)
+					longitude = rowStr;
+
+				else if (testCnt == 13)
+					signalLength = rowStr;
+
+				else if (testCnt == 15)
+					radius = rowStr;
+
+				else if (testCnt == 17)
+					cnt = rowStr;
+
+				testCnt++;
+			}
+			// 현재위치 주위에 AP를 받아올때 값이 null인 경우를 처리
+			if (ssid != null && signalLength != null) {
+				vw.add(new ViewWifiInfo(ssid, isOpen, apTelecom, mac, latitude,
+						longitude, signalLength, radius, cnt));
+			}
+
+		}
+	}
+
+	public void LocationZoom(LatLng loc) { // 줌함수
+		CameraPosition cp = new CameraPosition.Builder().target((loc)).zoom(16)
+				.build(); // 카메라 포지션을 해당 위도 경도로 세팅
+		// 맵 위치를 카메라 포지션으로 세팅
+		mGoogleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+	}
+
+	public void setCurrentMarker(double lat, double lon) { // 현재 마커 설정
+		LatLng loc = new LatLng(lat, lon); // 위치 세팅
+		LocationZoom(loc);
+		MarkerOptions marker = new MarkerOptions().position(loc);
+
+		marker.icon(BitmapDescriptorFactory
+				.fromResource(R.drawable.img_marker_myposition));
+
+		if (curMarker != null)
+			curMarker.remove();
+
+		curMarker = mGoogleMap.addMarker(marker);
+	}
+
+	public void setApMarker(ArrayList<ViewWifiInfo> vw, ArrayList<Marker> m,
+			ArrayList<Circle> c) { // ap마커 설정
+
+		if (!m.isEmpty()) { // 비어있지 않다면 변수 초기화
+			int size = m.size();
+			for (int i = 0; i < size; i++) {
+				m.get(i).remove();
+				c.get(i).remove();
+			}
+		}
+
+		for (int i = 0; i < vw.size(); i++) {
+			LatLng loc = new LatLng(Double.valueOf(vw.get(i).getData(4)),
+					Double.valueOf(vw.get(i).getData(5))); // 위치
+			CircleOptions circleOptions = new CircleOptions().center(loc)
+					.radius((Double.valueOf(vw.get(i).getData(7))))
+					.strokeWidth(3).strokeColor(0);
+			MarkerOptions marker = new MarkerOptions().position(loc); // 마커도 세팅
+
+			int color;
+			int apMarker;
+			Button signalBtn = null; // 버튼정보를 받아오기위한 변수
+
+			// 신호세기에 따른 원 색깔 변경
+			if (vw.get(i).getData(2).equals("SKT")) {
+				apMarker = R.drawable.img_marker_skt;
+				color = sktColor;
+				signalBtn = (Button) findViewById(R.id.sktButton);
+			} else if (vw.get(i).getData(2).equals("KT")) {
+				apMarker = R.drawable.img_marker_kt;
+				color = ktColor;
+				signalBtn = (Button) findViewById(R.id.ktButton);
+			} else if (vw.get(i).getData(2).equals("LGU+")) {
+				apMarker = R.drawable.img_marker_lg;
+				color = lgColor;
+				signalBtn = (Button) findViewById(R.id.lgButton);
+			} else {
+				apMarker = R.drawable.img_marker_none;
+				color = noneColor;
+				signalBtn = (Button) findViewById(R.id.noneButton);
+			}
+
+			circleOptions.fillColor(color).strokeColor(color);
+
+			marker.icon(BitmapDescriptorFactory.fromResource(apMarker));
+
+			marker.title(vw.get(i).getData(0));
+
+			// 버튼이 눌러져있다면 보이지 않게 설정
+			if (signalBtn.isSelected()) {
+				marker.visible(false);
+				circleOptions.visible(false);
+			}
+
+			if (mGoogleMap.getCameraPosition().zoom < 13.0)
+				circleOptions.visible(false);
+
+			c.add(mGoogleMap.addCircle(circleOptions));
+			m.add(mGoogleMap.addMarker(marker));
+		}
+	}
+
+	public String getLocalIpAddress() {// 맥 어드레스
+		try {
+			for (Enumeration<NetworkInterface> en = NetworkInterface
+					.getNetworkInterfaces(); en.hasMoreElements();) {
+				NetworkInterface intf = en.nextElement();
+				for (Enumeration<InetAddress> enumIpAddr = intf
+						.getInetAddresses(); enumIpAddr.hasMoreElements();) {
+					InetAddress inetAddress = enumIpAddr.nextElement();
+					if (!inetAddress.isLoopbackAddress()) {
+						return inetAddress.getHostAddress().toString();
+					}
+				}
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return null;
+	}
+
+	public IBinder onBind(Intent arg0) {
+		return null;
+	}
+
+	public void onLocationChanged(Location location) {
+
+	}
+
+	public void onStatusChanged(String provider, int status, Bundle extras) {
+
+	}
+
+	public void onProviderEnabled(String provider) {
+
+	}
+
+	public void onProviderDisabled(String provider) {
+
+	}
+}

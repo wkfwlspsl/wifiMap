@@ -1,0 +1,8 @@
+<resources>
+
+    <color name="baseDarkColor">#665C00</color>
+    <color name="baseMiddleColor">#9C9236</color>
+    <color name="mainColor">#1C8CE6</color>
+    <color name="baseSoftColor">#D2C86C</color>
+
+</resources>

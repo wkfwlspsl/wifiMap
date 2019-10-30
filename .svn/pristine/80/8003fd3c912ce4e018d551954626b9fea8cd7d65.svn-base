@@ -1,0 +1,1047 @@
+package com.example.wifimap;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.StringTokenizer;
+
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+
+import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.app.AlertDialog.Builder;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Color;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.StrictMode;
+import android.support.v4.app.FragmentActivity;
+import android.telephony.TelephonyManager;
+import android.util.Log;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnCameraChangeListener;
+import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+
+public class ShowWifiMap extends FragmentActivity implements LocationListener {
+	String Max_Count_Macaddress;
+
+	List<Address> faddresses;
+
+	ConnectivityManager cManager;
+	NetworkInfo mMobile;
+	NetworkInfo mWifi;
+	NetworkInfo mWimax;
+	boolean netstate = false;
+
+	// 정보를 위한 변수들
+	WifiInfo info;
+	WifiManager mng;
+	WifiInfo wifi;
+	String Ip, apTelecom, TelecomIP, radius, mac, cnt;
+	int count = 0;
+	InputStream is = null;
+	String[][] RealrowArr;
+
+	// 현재 접속중인 Wifi의 정보
+	String curTime, curUserTelecom, curSsid, curMac, curDeviceName, c_channel,
+			curApTelecom, curIp, curIsOpen;
+	double curLat, curLon = 0;
+	int curLength = 0;
+	int maxCount;
+
+	// 지도를 위한 변수들
+	GoogleMap mGoogleMap; // 지도맵 받을 변수
+	Geocoder geoCoder; // 주소(string)를 위도경도로 바꾸어주는 변수
+	protected LocationManager locationManager;
+	String userTelecom, ssid, signalLength, longitude, latitude;
+	Marker curMarker = null; // 현재 위치 마커
+	Marker searchMarker = null; // 검색 위치 마커
+	boolean isGetLocation = false; // GPS 나 wife 정보가 켜져있는지 확인, GPS 상태값
+	String inputPasswd;
+
+	// 현재 위치 주변의 Wifi 목록
+	ArrayList<ViewWifiInfo> currentWifi = new ArrayList<ViewWifiInfo>();
+	ArrayList<Marker> currentApMarker = new ArrayList<Marker>(); // ap위치 마커
+	ArrayList<Circle> currentApCircle = new ArrayList<Circle>(); // 원...
+
+	// 검새한위치 주변의 Wifi 목록
+	ArrayList<ViewWifiInfo> searchWifi = new ArrayList<ViewWifiInfo>();
+	ArrayList<Marker> searchApMarker = new ArrayList<Marker>(); // ap위치 마커
+	ArrayList<Circle> searchApCircle = new ArrayList<Circle>(); // 원...
+
+	// 색상변수
+	static int sunColor = Color.argb(204, 255, 61, 11);
+	static int suncloudColor = Color.argb(204, 255, 194, 0);
+	static int cloudColor = Color.argb(204, 95, 192, 205);
+
+	Handler handler = new Handler();
+
+	// DB관련 변수
+	DBHelper myHelper;
+	EditText edtName, edtNameResult;
+	SQLiteDatabase sqlDB;
+
+	private Builder listDialog;
+
+	public boolean mDatainput = false;
+
+	@SuppressLint("InflateParams")
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.show_wifi_map);
+
+		// 안드로이드 버전 3.0 이상에서 UI Thread에서 인터넷 연결시 runtime 에러 안 나게 하는 법
+		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder()
+				.permitAll().build();
+		StrictMode.setThreadPolicy(policy);
+
+		// < 변수들 초기화 >
+		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+		mGoogleMap = ((SupportMapFragment) getSupportFragmentManager()
+				.findFragmentById(R.id.map)).getMap(); // 맵 초기화
+		geoCoder = new Geocoder(this); // geoCoder 초기화
+		mng = (WifiManager) getSystemService(WIFI_SERVICE);
+		info = mng.getConnectionInfo();
+
+		Button sunBtn = (Button) findViewById(R.id.sunButton);
+		Button suncloudBtn = (Button) findViewById(R.id.suncloudButton);
+		Button cloudBtn = (Button) findViewById(R.id.cloudButton);
+		Button returnCureBtn = (Button) findViewById(R.id.returnCurButton);
+		Button searchBtn = (Button) findViewById(R.id.searchButton);
+		Button searchListBtn = (Button) findViewById(R.id.searchListButton);
+		Button dropBtn = (Button) findViewById(R.id.dropButton);
+		getcurrentLocation(); // 현재 위치 출력해주는 함수 호출
+
+		if (checkNetwordState())
+			handler.post(callback);
+
+		myHelper = new DBHelper(this);
+
+		searchListBtn.setOnClickListener(searchListListener);
+		dropBtn.setOnClickListener(dropListener);
+		searchBtn.setOnClickListener(searchListener);
+		returnCureBtn.setOnClickListener(returnCurListener); // 현재 위치로 돌아가는 버튼
+		sunBtn.setOnClickListener(signalBtnListener);
+		suncloudBtn.setOnClickListener(signalBtnListener);
+		cloudBtn.setOnClickListener(signalBtnListener);
+
+		// 카메라 이동 확대 축소가 있을때 이벤트 발생
+		mGoogleMap.setOnCameraChangeListener(new OnCameraChangeListener() {
+			public void onCameraChange(CameraPosition position) {
+				// LatLng point = position.target;
+				float zoomLevel = position.zoom;
+
+				if (!currentApCircle.isEmpty())
+					if (zoomLevel < 13.0) // 원을 안보이게 해야하는 경우
+						for (int i = 0; i < currentApCircle.size(); i++)
+							setCircleVisible(currentApCircle.get(i), false);
+					else
+						// 원을 보이게 해야하는 경우
+						for (int i = 0; i < currentApCircle.size(); i++)
+							setCircleVisible(currentApCircle.get(i), true);
+
+				if (!searchApCircle.isEmpty())
+					if (zoomLevel < 13.0)
+						for (int i = 0; i < searchApCircle.size(); i++)
+							setCircleVisible(searchApCircle.get(i), false);
+					else
+						for (int i = 0; i < searchApCircle.size(); i++)
+							setCircleVisible(searchApCircle.get(i), true);
+			}
+		});
+
+		// 마커 클릭시 해당 Wifi의 정보 출력
+		mGoogleMap.setOnMarkerClickListener(new OnMarkerClickListener() {
+
+			@Override
+			public boolean onMarkerClick(Marker marker) {
+				int Length = 0;
+				Marker m = null;
+				Circle c = null;
+
+				if (!marker.equals(searchMarker) && !marker.equals(curMarker)) {
+					marker.setTitle(marker.getTitle());
+
+					for (int i = 0; i < currentWifi.size(); i++)
+						if (marker.equals(currentApMarker.get(i))) {
+							Length = Integer.valueOf(currentWifi.get(i)
+									.getData(6));
+							m = currentApMarker.get(i);
+							c = currentApCircle.get(i);
+
+							break;
+						}
+
+					for (int i = 0; i < searchWifi.size(); i++)
+						if (marker.equals(searchApMarker.get(i))) {
+							Length = Integer.valueOf(searchWifi.get(i).getData(
+									6));
+							m = searchApMarker.get(i);
+							c = searchApCircle.get(i);
+							break;
+						}
+					c.setStrokeColor(Color.argb(204, 28, 140, 230));
+					c.setStrokeWidth(2);
+
+					final View innerView = getLayoutInflater().inflate(
+							R.layout.popup_activity, null);
+					AlertDialog.Builder ab = new AlertDialog.Builder(
+							ShowWifiMap.this);
+					ab.setView(innerView);
+
+					TextView wifiName = (TextView) innerView
+							.findViewById(R.id.popupWifiName);
+					wifiName.setText(marker.getTitle());
+
+					ImageView signalImg = (ImageView) innerView
+							.findViewById(R.id.popupImg);
+
+					if (Length < 300)
+						signalImg.setImageResource(R.drawable.bg_popup_weak);
+					else if (Length < 600)
+						signalImg.setImageResource(R.drawable.bg_popup_medium);
+					else
+						signalImg.setImageResource(R.drawable.bg_popup_strong);
+
+					ab.setPositiveButton("확인",
+							new DialogInterface.OnClickListener() {
+								@Override
+								public void onClick(DialogInterface arg0,
+										int arg1) {
+								}
+							});
+
+					ab.show();
+				}
+				else if(marker.equals(curMarker)){
+					return true;
+				}
+				c.setStrokeColor(c.getFillColor());
+				c.setStrokeWidth(1);
+				return true;
+			}
+
+		});
+	}
+
+	private OnClickListener searchListListener = new OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			sqlDB = myHelper.getReadableDatabase();
+
+			Cursor cursor = sqlDB.rawQuery("select * from testTB;", null);
+			// 테이블에 입력된 모든 데이터가 커서 변수에 들어있는 상태가 됨
+			// 첫번재 행을 가리키고 있는 상태
+
+			String strNames = "";
+
+			while (cursor.moveToNext()) {
+				strNames += cursor.getString(0) + "\n";
+			}
+			cursor.close();
+			sqlDB.close();
+			if (strNames.equals("")) {
+				Toast.makeText(ShowWifiMap.this, "검색목록이 존재하지 않습니다.",
+						Toast.LENGTH_LONG).show();
+			} else {
+				IDialog(strNames);
+			}
+		}
+
+	};
+
+	private OnClickListener dropListener = new OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			sqlDB = myHelper.getWritableDatabase();
+			myHelper.onUpgrade(sqlDB, 1, 2);
+			sqlDB.close();
+			Toast.makeText(ShowWifiMap.this, "검색목록 초기화 완료.", Toast.LENGTH_LONG)
+					.show();
+		}
+
+	};
+
+	private View.OnClickListener searchListener = new View.OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			cManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+			mMobile = cManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
+			mWifi = cManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+			mWimax = cManager.getNetworkInfo(ConnectivityManager.TYPE_WIMAX);
+
+			if ((mMobile != null && mMobile.isConnected())
+					|| (mWifi != null && mWifi.isConnected())
+					|| (mWimax != null && mWimax.isConnected())) {
+				netstate = true;
+			}
+
+			if (!netstate) { // 인터넷연결이 안되어있는 경우
+				Toast.makeText(ShowWifiMap.this, "인터넷 연결 상태를 확인해주시기 바랍니다",
+						Toast.LENGTH_SHORT).show();
+			} else {
+				AlertDialog.Builder alert = new AlertDialog.Builder(
+						ShowWifiMap.this);
+				alert.setTitle("주소 검색");
+				alert.setMessage("검색하실 주소를 입력해주세요.");
+				final EditText input = new EditText(ShowWifiMap.this);
+				alert.setView(input);
+
+				alert.setPositiveButton("확인",
+						new DialogInterface.OnClickListener() {
+
+							public void onClick(DialogInterface dialog,
+									int whichButton) {
+								boolean na = false;
+								sqlDB = myHelper.getWritableDatabase();
+								Cursor cursor;
+								cursor = sqlDB.rawQuery(
+										"select * from testTB;", null);
+								String strNames = "";
+
+								// list에 위도경도
+								// List<Address> faddresses = null;
+								try {
+									if (input.getText().toString() != null)
+										faddresses = geoCoder
+												.getFromLocationName(input
+														.getText().toString(),
+														5);
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+								// 받아오기
+								if (faddresses == null) { // 실패할시(없는 주소를
+									// 적었을 때)
+									Toast.makeText(ShowWifiMap.this,
+											"존재하지 않는 주소입니다.", Toast.LENGTH_LONG)
+											.show();
+								} else { // 성공했을시
+									double lat = faddresses.get(0)
+											.getLatitude(); // 위도
+									double lon = faddresses.get(0)
+											.getLongitude(); // 경도 받기
+
+									setSearchMarker(lat, lon);
+
+									try {
+										findCloseWifi(searchWifi, lat, lon);
+									} catch (Exception e) {
+										e.printStackTrace();
+									}
+									setApMarker(searchWifi, searchApMarker,
+											searchApCircle);
+
+									while (cursor.moveToNext())
+										strNames += cursor.getString(0) + "\n";
+
+									String[] data = strNames.split("\n");
+
+									for (int i = 0; i < data.length; i++) {
+										if (data[i].equals(input.getText()
+												.toString())) {
+											na = true;
+											break;
+										}
+									}
+
+									if (!na) {// db에 중복되는 검색어가 없으면
+										sqlDB.execSQL("insert into testTB values('"
+												+ input.getText().toString()
+												+ "');");
+									} else {// db에 중복되는 검색어가 있으면
+										sqlDB.execSQL("DELETE FROM testTB WHERE s_list='"
+												+ input.getText().toString()
+												+ "';"); // 삭제후
+										sqlDB.execSQL("insert into testTB values('"
+												+ input.getText().toString()
+												+ "');"); // 데이터 입력
+									}
+
+									sqlDB.close();
+								}
+
+							}
+						});
+				alert.setNegativeButton("취소", null);
+				alert.show();
+
+			}
+		}
+	};
+
+	private View.OnClickListener returnCurListener = new View.OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			if (v.getId() == R.id.returnCurButton) {
+				LocationZoom(new LatLng(curLat, curLon));
+
+				if (searchMarker != null)
+					searchMarker.remove();
+			}
+		}
+	};
+
+	// 해, 해구름, 구름 버튼리스너
+	private OnClickListener signalBtnListener = new View.OnClickListener() {
+		@Override
+		public void onClick(View v) {
+			Button btn = (Button) findViewById(v.getId());
+			int color = 0;
+
+			// 버튼이 선택된 상태인지 아닌지 판별후 변경
+			if (btn.isSelected())
+				btn.setSelected(false);
+			else
+				btn.setSelected(true);
+
+			// 버튼에 따라 색상 지정
+			if (v.getId() == R.id.sunButton)
+				color = sunColor;
+			else if (v.getId() == R.id.suncloudButton)
+				color = suncloudColor;
+			else if (v.getId() == R.id.cloudButton)
+				color = cloudColor;
+
+			// 색상에 따라서 일치하는 경우 안보이게 함
+			if (color != 0) {
+				for (int i = 0; i < currentApCircle.size(); i++) {
+					if (currentApCircle.get(i).getFillColor() == color)
+						if (currentApCircle.get(i).isVisible()) {
+							currentApCircle.get(i).setVisible(false);
+							currentApMarker.get(i).setVisible(false);
+						} else {
+							currentApCircle.get(i).setVisible(true);
+							currentApMarker.get(i).setVisible(true);
+						}
+				}
+				for (int i = 0; i < searchApCircle.size(); i++) {
+					if (searchApCircle.get(i).getFillColor() == color)
+						if (searchApCircle.get(i).isVisible()) {
+							searchApCircle.get(i).setVisible(false);
+							searchApMarker.get(i).setVisible(false);
+						} else {
+							searchApCircle.get(i).setVisible(true);
+							searchApMarker.get(i).setVisible(true);
+						}
+				}
+			}
+		}
+	};
+
+	private boolean checkNetwordState() {
+		ConnectivityManager connManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+
+		NetworkInfo state_wifi = connManager
+				.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+		if (state_wifi.isConnected())
+			return true;
+		else
+			return false;
+
+	}
+
+	// locationManager 설정
+	public void getLocationManager() {
+
+	}
+
+	// 현재 위치 알아내기
+	public void getcurrentLocation() {
+
+		Location location = null;
+		boolean isGPSEnabled = false; // 현재 GPS 사용유무
+		boolean isNetworkEnabled = false;// 네트워크 사용유무
+
+		// 최소 GPS 정보 업데이트 거리 10미터
+		long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10;
+		// 최소 GPS 정보 업데이트 시간 밀리세컨이므로 1분
+		long MIN_TIME_BW_UPDATES = 1000 * 60 * 1;
+
+		try {
+			// GPS 정보 가져오기
+			isGPSEnabled = locationManager
+					.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+			// 현재 네트워크 상태 값 알아오기
+			isNetworkEnabled = locationManager
+					.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+
+			if (!isGPSEnabled && !isNetworkEnabled) {
+				// GPS 와 네트워크사용이 가능하지 않을때 소스 구현
+				Toast.makeText(ShowWifiMap.this, "현재 위치를 알수가 없습니다.",
+						Toast.LENGTH_LONG).show();
+
+				curLat = 37.566535;
+				curLon = 126.97796919999996;
+
+				findCloseWifi(currentWifi, curLat, curLon);
+				setApMarker(currentWifi, currentApMarker, currentApCircle);
+
+				isGetLocation = false;
+			} else {
+				isGetLocation = true;
+
+				if (isNetworkEnabled) {
+					locationManager.requestLocationUpdates(
+							LocationManager.NETWORK_PROVIDER,
+							MIN_TIME_BW_UPDATES,
+							MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
+
+					if (locationManager != null) {
+						location = locationManager
+								.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+						if (location != null) { // 위도 경도 저장
+							curLat = location.getLatitude();
+							curLon = location.getLongitude();
+
+							findCloseWifi(currentWifi, curLat, curLon);
+							setApMarker(currentWifi, currentApMarker,
+									currentApCircle);
+						}
+					}
+				}
+
+				else if (isGPSEnabled) {
+					if (location == null) {
+						locationManager.requestLocationUpdates(
+								LocationManager.GPS_PROVIDER,
+								MIN_TIME_BW_UPDATES,
+								MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
+						if (locationManager != null) {
+							location = locationManager
+									.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+							if (location != null) {
+								curLat = location.getLatitude();
+								curLon = location.getLongitude();
+
+								findCloseWifi(currentWifi, curLat, curLon);
+								setApMarker(currentWifi, currentApMarker,
+										currentApCircle);
+							}
+						}
+					}
+				}
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		setCurrentMarker(curLat, curLon);
+	}
+
+	public void stopUsingGPS() { // GPS 종료
+		if (locationManager != null) {
+			locationManager.removeUpdates(ShowWifiMap.this);
+		}
+	}
+
+	public void showSettingsAlert() { // GPS 정보를 가져오지 못했을때 설정값으로 갈지 물어보는 alert 창
+		AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
+
+		alertDialog.setTitle("GPS 사용유무셋팅");
+
+		alertDialog.show();
+	}
+
+	public int getScanResultSecurity(ScanResult scanResult) { // 내가 연결한 와이파이가
+																// 열려있는지 확인하는 함수
+		final String cap = scanResult.capabilities;
+		final String[] securityModes = { "WEP", "PSK", "EAP" };
+
+		for (int i = securityModes.length - 1; i >= 0; i--) {
+			if (cap.contains(securityModes[i])) {
+				return 0;
+			}
+		}
+		return 1;
+	}
+
+	// AP마커에 대한 원을 출력시킬 것인지 판별하는 함수
+	public void setCircleVisible(Circle setC, boolean mapBool) {
+		Button sunBtn = (Button) findViewById(R.id.sunButton);
+		Button sunCloudBtn = (Button) findViewById(R.id.suncloudButton);
+		Button cloudBtn = (Button) findViewById(R.id.cloudButton);
+
+		boolean bool = true;
+
+		// 원 색깔에 따라 버튼이 눌렸는지 판별
+		if (setC.getFillColor() == sunColor)
+			if (sunBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+		else if (setC.getFillColor() == suncloudColor)
+			if (sunCloudBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+		else if (setC.getFillColor() == cloudColor)
+			if (cloudBtn.isSelected())
+				bool = false;
+			else
+				bool = true;
+
+		// 버튼이 선택되어 있지 않고, 지도에서도 원이 보이는 레벨일 경우에만 출력
+		if (bool == true && mapBool == true)
+			setC.setVisible(true);
+		else
+			setC.setVisible(false);
+	}
+
+	public void findCloseWifi(ArrayList<ViewWifiInfo> vw, double lat, double lon)
+			throws URISyntaxException, ClientProtocolException, IOException {
+
+		String passwd = null, isOpen = null;
+		// 현재 위치 주변의 WIFI 목록을 받아와 지도에 표시!
+
+		// 서버로 부터 데이터 받아오기
+		StringBuilder jsonHtml = new StringBuilder();
+
+		URL url = new URL("http://113.198.84.38/dbTOandroid.php?latitude="
+				+ lat + "&longitude=" + lon);
+		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+		if (conn != null) {
+			conn.setConnectTimeout(10000);
+			conn.setUseCaches(false);
+			if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
+				BufferedReader br = new BufferedReader(new InputStreamReader(
+						conn.getInputStream(), "EUC-KR"));
+
+				for (;;) {
+
+					String line = br.readLine();
+
+					if (line == null)
+						break;
+					jsonHtml.append(line + "\n");
+				}
+				br.close();
+			}
+			conn.disconnect();
+		}
+
+		String Json = jsonHtml.toString();
+
+		String[] rowArr = Json.split("\n");
+
+		if (!vw.isEmpty())
+			vw.clear();
+
+		maxCount = 0;
+
+		for (int q = 0; q < rowArr.length; q++) {
+			int testCnt = 0;
+			StringTokenizer stk = new StringTokenizer(rowArr[q], "\"", false);
+			while (stk.hasMoreTokens()) {
+				String rowStr = stk.nextToken();
+
+				if (testCnt == 1)
+					ssid = rowStr;
+
+				else if (testCnt == 3)
+					isOpen = rowStr;
+
+				else if (testCnt == 5)
+					apTelecom = rowStr;
+
+				else if (testCnt == 7)
+					mac = rowStr;
+
+				else if (testCnt == 9)
+					latitude = rowStr;
+
+				else if (testCnt == 11)
+					longitude = rowStr;
+
+				else if (testCnt == 13)
+					signalLength = rowStr;
+
+				else if (testCnt == 15)
+					radius = rowStr;
+
+				else if (testCnt == 17) {
+					cnt = rowStr;
+					if (maxCount < Integer.valueOf(cnt)) {
+						maxCount = Integer.valueOf(cnt);
+						Max_Count_Macaddress = mac;
+					}
+				}
+				testCnt++;
+			}
+			// 현재위치 주위에 AP를 받아올때 값이 null인 경우를 처리
+			if (ssid != null && signalLength != null) {
+				vw.add(new ViewWifiInfo(ssid, isOpen, apTelecom, mac, latitude,
+						longitude, signalLength, radius, cnt));
+			}
+		}
+	}
+
+	public void LocationZoom(LatLng loc) { // 줌함수
+		CameraPosition cp = new CameraPosition.Builder().target((loc)).zoom(16)
+				.build(); // 카메라 포지션을 해당 위도 경도로 세팅
+		// 맵 위치를 카메라 포지션으로 세팅
+		mGoogleMap.animateCamera(CameraUpdateFactory.newCameraPosition(cp));
+	}
+
+	public void setCurrentMarker(double lat, double lon) { // 현재 마커 설정
+		LatLng loc = new LatLng(lat, lon); // 위치 세팅
+		LocationZoom(loc);
+		MarkerOptions marker = new MarkerOptions().position(loc);
+
+		marker.icon(BitmapDescriptorFactory
+				.fromResource(R.drawable.img_marker_myposition));
+
+		if (curMarker != null)
+			curMarker.remove();
+
+		curMarker = mGoogleMap.addMarker(marker);
+	}
+
+	public void setSearchMarker(double lat, double lon) { // 검색 마커
+		LatLng loc = new LatLng(lat, lon); // 위치 세팅
+		LocationZoom(loc);
+		MarkerOptions marker = new MarkerOptions().position(loc);
+
+		marker.icon(BitmapDescriptorFactory
+				.fromResource(R.drawable.img_marker_search));
+
+		if (searchMarker != null)
+			searchMarker.remove();
+
+		searchMarker = mGoogleMap.addMarker(marker);
+	}
+
+	public void setApMarker(ArrayList<ViewWifiInfo> vw, ArrayList<Marker> m,
+			ArrayList<Circle> c) { // ap마커 설정
+
+		if (!m.isEmpty()) { // 비어있지 않다면 변수 초기화
+			int size = m.size();
+			for (int i = 0; i < size; i++) {
+				m.get(i).remove();
+				c.get(i).remove();
+			}
+		}
+
+		for (int i = 0; i < vw.size(); i++) {
+			LatLng loc = new LatLng(Double.valueOf(vw.get(i).getData(4)),
+					Double.valueOf(vw.get(i).getData(5))); // 위치
+			CircleOptions circleOptions = new CircleOptions().center(loc)
+					.radius((Double.valueOf(vw.get(i).getData(7))))
+					.strokeWidth(3).strokeColor(0);
+			MarkerOptions marker = new MarkerOptions().position(loc); // 마커도 세팅
+
+			int color;
+			int apMarker;
+			Button signalBtn = null; // 버튼정보를 받아오기위한 변수
+			// 신호세기에 따른 원 색깔 변경
+			if (Integer.valueOf(vw.get(i).getData(8)) == maxCount) {
+				if (Integer.valueOf(vw.get(i).getData(6)) < 300) {
+					apMarker = R.drawable.img_marker_hot_week;
+					color = cloudColor;
+					signalBtn = (Button) findViewById(R.id.cloudButton);
+				} else if (Integer.valueOf(vw.get(i).getData(6)) < 600) {
+					apMarker = R.drawable.img_marker_hot_medium;
+					color = suncloudColor;
+					signalBtn = (Button) findViewById(R.id.suncloudButton);
+				} else {
+					apMarker = R.drawable.img_marker_hot_strong;
+					color = sunColor;
+					signalBtn = (Button) findViewById(R.id.sunButton);
+				}
+			} else {
+				if (Integer.valueOf(vw.get(i).getData(6)) < 300) {
+					apMarker = R.drawable.img_marker_weak;
+					color = cloudColor;
+					signalBtn = (Button) findViewById(R.id.cloudButton);
+				} else if (Integer.valueOf(vw.get(i).getData(6)) < 600) {
+					apMarker = R.drawable.img_marker_medium;
+					color = suncloudColor;
+					signalBtn = (Button) findViewById(R.id.suncloudButton);
+				} else {
+					apMarker = R.drawable.img_marker_strong;
+					color = sunColor;
+					signalBtn = (Button) findViewById(R.id.sunButton);
+				}
+			}
+			circleOptions.fillColor(color).strokeColor(color);
+
+			marker.icon(BitmapDescriptorFactory.fromResource(apMarker));
+
+			marker.title(vw.get(i).getData(0));
+
+			// 버튼이 눌러져있다면 보이지 않게 설정
+			if (signalBtn.isSelected()) {
+				marker.visible(false);
+				circleOptions.visible(false);
+			}
+
+			if (mGoogleMap.getCameraPosition().zoom < 13.0)
+				circleOptions.visible(false);
+
+			c.add(mGoogleMap.addCircle(circleOptions));
+			m.add(mGoogleMap.addMarker(marker));
+		}
+	}
+
+	public String getLocalIpAddress() {// 맥 어드레스
+		try {
+			for (Enumeration<NetworkInterface> en = NetworkInterface
+					.getNetworkInterfaces(); en.hasMoreElements();) {
+				NetworkInterface intf = en.nextElement();
+				for (Enumeration<InetAddress> enumIpAddr = intf
+						.getInetAddresses(); enumIpAddr.hasMoreElements();) {
+					InetAddress inetAddress = enumIpAddr.nextElement();
+					if (!inetAddress.isLoopbackAddress()) {
+						return inetAddress.getHostAddress().toString();
+					}
+				}
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return null;
+	}
+
+	private void IDialog(String x) {
+		final String[] data = x.split("\n");
+		final String[] rdata = { "", "", "", "", "" };
+		int j = 0;
+
+		for (int i = data.length - 1; i >= 0; i--) {
+			rdata[j] = data[i];
+			j++;
+			if (j == 5) {
+				break;
+			}
+		}
+
+		listDialog = new AlertDialog.Builder(this);
+		listDialog.setTitle("검색목록")
+				.setItems(rdata, new DialogInterface.OnClickListener() {
+
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						try {
+							if (rdata[which] != null)
+								faddresses = geoCoder.getFromLocationName(
+										rdata[which], 5);
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+						// 받아오기
+						if (faddresses.size() == 0) { // 실패할시(없는 주소를
+							// 적었을 때)
+							Toast.makeText(ShowWifiMap.this, "존재하지 않는 주소입니다.",
+									Toast.LENGTH_LONG).show();
+						} else { // 성공했을시
+							double lat = faddresses.get(0).getLatitude(); // 위도
+							double lon = faddresses.get(0).getLongitude(); // 경도
+							// 받기
+
+							setSearchMarker(lat, lon);
+
+							try {
+								findCloseWifi(searchWifi, lat, lon);
+							} catch (Exception e) {
+								e.printStackTrace();
+							}
+							setApMarker(searchWifi, searchApMarker,
+									searchApCircle);
+						}
+
+					}
+				}).setNegativeButton("닫기", null).show();
+	}
+
+	public Runnable callback = new Runnable() {
+
+		public void run() {
+			moveTaskToBack(true);
+
+			TelephonyManager tpMgr = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+
+			// 전송 날짜
+			Date d = new Date();
+			String time = (new SimpleDateFormat("yyyy-MM-dd hh:mm:ss"))
+					.format(d);
+
+			// 사용자 통신사
+			curUserTelecom = tpMgr.getNetworkOperatorName();
+
+			// Wifi의 MAC Address
+			curMac = getLocalIpAddress();
+
+			// wifi의 ssid
+			String temp = info.getSSID();
+			curSsid = temp.substring(1, temp.length() - 1);
+
+			// wifi의 신호 세기
+			curLength = (info.getRssi() + 120) * 10;
+			// -120 ~ -40 출력되는 값은 0 ~800
+
+			curDeviceName = Build.MODEL;
+
+			// AP의 IP를 판별
+			try {
+				apTelecom = null;
+				count = 0;
+				for (Enumeration<NetworkInterface> en = NetworkInterface
+						.getNetworkInterfaces(); en.hasMoreElements();) {
+					NetworkInterface intf = en.nextElement();
+					for (Enumeration<InetAddress> enumIpAddr = intf
+							.getInetAddresses(); enumIpAddr.hasMoreElements();) {
+						InetAddress inetAddress = enumIpAddr.nextElement();
+						if (!inetAddress.isLoopbackAddress())// My IP address
+							curIp = inetAddress.getHostAddress().toString();
+					}
+				}
+
+			} catch (Exception e) {
+				Log.e("Error occurred  ", e.toString());
+			}
+
+			// 연결된 와이파이의 연결유무를 판별
+			List<ScanResult> scanResultList = mng.getScanResults();
+
+			for (ScanResult result : scanResultList)
+				if (result.SSID.equals(curSsid))
+					curIsOpen = Integer.toString(getScanResultSecurity(result));
+
+			// 연결된 와이파이의 통신사 판별
+			if (curSsid.contains("SK") || curSsid.contains("sk")
+					|| curSsid.contains("Sk")) {
+				curApTelecom = "SKT";
+			}
+			if (curSsid.equals("KT") || curSsid.equals("Kt")
+					|| curSsid.equals("kt") || curSsid.equals("OLLEH")
+					|| curSsid.equals("Olleh") || curSsid.equals("olleh")
+					|| curSsid.equals("Qook") || curSsid.equals("QOOK")) {
+				curApTelecom = "KT";
+			}
+			if (curSsid.equals("LG") || curSsid.equals("lg")
+					|| curSsid.equals("Lg") || curSsid.equals("U+")
+					|| curSsid.equals("u+")) {
+				
+				
+				curApTelecom = "LGU+";
+			} else {
+				curApTelecom = "OTHERS";
+			}
+
+			// 사용자 통신사 판별
+			if (curUserTelecom.startsWith("S"))
+				curUserTelecom = "SKT";
+			else if (curUserTelecom.startsWith("K"))
+				curUserTelecom = "KT";
+			else
+				curUserTelecom = "LGU+";
+
+			// 서버로 데이터 전송
+			try {
+				URI sendUrl = new URI("http://113.198.84.38/about.php");
+				HttpClient httpclient = new DefaultHttpClient();
+				HttpPost httpPost = new HttpPost(sendUrl);
+				ArrayList<BasicNameValuePair> nameValuePairs = new ArrayList<BasicNameValuePair>();
+				nameValuePairs.add(new BasicNameValuePair("time", time));
+				nameValuePairs.add(new BasicNameValuePair("userTelecom",
+						curUserTelecom));
+				nameValuePairs.add(new BasicNameValuePair("ssid", curSsid));
+				nameValuePairs.add(new BasicNameValuePair("mac", curMac));
+				nameValuePairs.add(new BasicNameValuePair("latitude", String
+						.valueOf(curLat)));
+				nameValuePairs.add(new BasicNameValuePair("longitude", String
+						.valueOf(curLon)));
+				nameValuePairs.add(new BasicNameValuePair("signalLength",
+						String.valueOf(curLength)));
+				nameValuePairs.add(new BasicNameValuePair("apTelecom",
+						curApTelecom));
+				nameValuePairs.add(new BasicNameValuePair("deviceName",
+						curDeviceName));
+				nameValuePairs.add(new BasicNameValuePair("isOpen", curIsOpen));
+
+				httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs,
+						"euc-kr")); // 한글 깨짐 방지
+
+				httpclient.execute(httpPost);
+				System.out.println(curIsOpen);
+			} catch (Exception e) {
+			}
+			handler.postDelayed(callback, 600000); // 데이터 전송 주기 600000 = 60초
+		}
+
+	};
+
+	public IBinder onBind(Intent arg0) {
+		return null;
+	}
+
+	public void onLocationChanged(Location location) {
+
+	}
+
+	public void onStatusChanged(String provider, int status, Bundle extras) {
+
+	}
+
+	public void onProviderEnabled(String provider) {
+
+	}
+
+	public void onProviderDisabled(String provider) {
+
+	}
+}
